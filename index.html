@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>社团招新智能匹配平台 - 演示版</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
+        .app-container { min-height: 100vh; }
+        .app-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 0 20px; }
+        .header-content { display: flex; align-items: center; justify-content: space-between; max-width: 1400px; margin: 0 auto; height: 60px; }
+        .logo { font-size: 24px; font-weight: bold; }
+        .nav-menu { flex: 1; margin-left: 40px; }
+        .nav-menu .el-menu { background: transparent; border: none; }
+        .nav-menu .el-menu-item { color: white !important; }
+        .nav-menu .el-menu-item:hover { background: rgba(255,255,255,0.1) !important; }
+        .user-info { display: flex; align-items: center; gap: 10px; }
+        .app-main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+        .welcome-card { text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px; }
+        .welcome-card h1 { margin: 0 0 10px 0; font-size: 32px; }
+        .feature-card { text-align: center; cursor: pointer; transition: transform 0.3s; padding: 30px; }
+        .feature-card:hover { transform: translateY(-5px); }
+        .feature-icon { font-size: 48px; margin-bottom: 10px; }
+        .club-card { cursor: pointer; transition: transform 0.3s; margin-bottom: 20px; }
+        .club-card:hover { transform: translateY(-5px); }
+        .match-score { text-align: center; margin-bottom: 20px; }
+        .score-circle { width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; }
+        .score-value { color: white; font-size: 24px; font-weight: bold; }
+        .login-container { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .login-card { width: 400px; }
+        .demo-badge { position: fixed; top: 70px; right: 20px; background: #ff6b6b; color: white; padding: 8px 16px; border-radius: 4px; z-index: 9999; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="demo-badge">演示模式</div>
+        <el-container class="app-container">
+            <el-header v-if="isAuthenticated" class="app-header">
+                <div class="header-content">
+                    <div class="logo">社团匹配平台</div>
+                    <div class="nav-menu">
+                        <el-menu mode="horizontal" :default-active="activeMenu" @select="handleMenuSelect" background-color="transparent" text-color="#fff" active-text-color="#ffd04b">
+                            <el-menu-item index="home">首页</el-menu-item>
+                            <el-menu-item index="clubs">社团列表</el-menu-item>
+                            <el-menu-item index="questionnaire">兴趣问卷</el-menu-item>
+                            <el-menu-item index="recommendations">智能推荐</el-menu-item>
+                            <el-menu-item index="applications">我的申请</el-menu-item>
+                        </el-menu>
+                    </div>
+                    <div class="user-info">
+                        <span>{{ user.full_name }}</span>
+                        <el-button type="primary" size="small" @click="logout">退出</el-button>
+                    </div>
+                </div>
+            </el-header>
+            <el-main class="app-main">
+                <!-- 登录页面 -->
+                <div v-if="!isAuthenticated" class="login-container">
+                    <el-card class="login-card">
+                        <template #header>
+                            <h2 style="text-align: center; color: #409eff;">登录</h2>
+                        </template>
+                        <el-form :model="loginForm" label-width="80px">
+                            <el-form-item label="用户名">
+                                <el-input v-model="loginForm.username" placeholder="请输入用户名" />
+                            </el-form-item>
+                            <el-form-item label="密码">
+                                <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" />
+                            </el-form-item>
+                            <el-form-item>
+                                <el-button type="primary" @click="handleLogin" style="width: 100%">登录</el-button>
+                            </el-form-item>
+                            <el-form-item>
+                                <el-button type="text" @click="showRegister = true" style="width: 100%">还没有账号？去注册</el-button>
+                            </el-form-item>
+                        </el-form>
+                        <div style="margin-top: 20px; padding: 15px; background: #f5f7fa; border-radius: 4px;">
+                            <p style="margin: 0; color: #666; font-size: 12px;">
+                                <strong>演示账号：</strong><br>
+                                用户名：demo<br>
+                                密码：demo123
+                            </p>
+                        </div>
+                    </el-card>
+                </div>
+
+                <!-- 注册对话框 -->
+                <el-dialog v-model="showRegister" title="注册" width="500px">
+                    <el-form :model="registerForm" label-width="100px">
+                        <el-form-item label="用户名"><el-input v-model="registerForm.username" /></el-form-item>
+                        <el-form-item label="密码"><el-input v-model="registerForm.password" type="password" /></el-form-item>
+                        <el-form-item label="姓名"><el-input v-model="registerForm.full_name" /></el-form-item>
+                        <el-form-item label="学号"><el-input v-model="registerForm.student_id" /></el-form-item>
+                    </el-form>
+                    <template #footer>
+                        <el-button @click="showRegister = false">取消</el-button>
+                        <el-button type="primary" @click="handleRegister">注册</el-button>
+                    </template>
+                </el-dialog>
+
+                <!-- 首页 -->
+                <div v-if="currentPage === 'home' && isAuthenticated">
+                    <el-row :gutter="20">
+                        <el-col :span="24">
+                            <el-card class="welcome-card">
+                                <h1>欢迎使用社团招新智能匹配平台</h1>
+                                <p style="font-size: 18px; opacity: 0.9;">发现你的兴趣，加入理想的社团</p>
+                            </el-card>
+                        </el-col>
+                    </el-row>
+                    <el-row :gutter="20" style="margin-top: 20px">
+                        <el-col :span="8">
+                            <el-card class="feature-card" @click="currentPage = 'questionnaire'">
+                                <div class="feature-icon">📝</div>
+                                <h3 style="color: #409eff;">填写问卷</h3>
+                                <p style="color: #666;">填写兴趣问卷，让我们了解你的喜好</p>
+                            </el-card>
+                        </el-col>
+                        <el-col :span="8">
+                            <el-card class="feature-card" @click="currentPage = 'recommendations'">
+                                <div class="feature-icon">🎯</div>
+                                <h3 style="color: #409eff;">智能推荐</h3>
+                                <p style="color: #666;">AI智能匹配，为你推荐最适合的社团</p>
+                            </el-card>
+                        </el-col>
+                        <el-col :span="8">
+                            <el-card class="feature-card" @click="currentPage = 'clubs'">
+                                <div class="feature-icon">🏛️</div>
+                                <h3 style="color: #409eff;">浏览社团</h3>
+                                <p style="color: #666;">浏览所有社团，发现更多精彩</p>
+                            </el-card>
+                        </el-col>
+                    </el-row>
+                    <el-row :gutter="20" style="margin-top: 20px">
+                        <el-col :span="24">
+                            <el-card>
+                                <template #header><h3>热门社团</h3></template>
+                                <el-row :gutter="20">
+                                    <el-col :span="6" v-for="club in hotClubs" :key="club.id">
+                                        <el-card class="club-card" @click="viewClub(club)">
+                                            <h4>{{ club.name }}</h4>
+                                            <p style="color: #666; font-size: 14px; margin: 10px 0;">{{ club.description }}</p>
+                                            <el-tag>{{ club.category }}</el-tag>
+                                            <div style="margin-top: 10px; font-size: 12px; color: #999;">
+                                                成员: {{ club.member_count }}
+                                                <el-rate v-model="club.activity_level" disabled show-score style="margin-left: 10px;" />
+                                            </div>
+                                        </el-card>
+                                    </el-col>
+                                </el-row>
+                            </el-card>
+                        </el-col>
+                    </el-row>
+                </div>
+
+                <!-- 社团列表 -->
+                <div v-if="currentPage === 'clubs' && isAuthenticated">
+                    <el-card>
+                        <template #header>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <h3 style="margin: 0;">社团列表</h3>
+                                <div>
+                                    <el-select v-model="filterCategory" placeholder="选择类别" clearable style="width: 150px; margin-right: 10px;">
+                                        <el-option label="全部" value="" />
+                                        <el-option label="音乐" value="音乐" />
+                                        <el-option label="科技" value="科技" />
+                                        <el-option label="体育" value="体育" />
+                                        <el-option label="艺术" value="艺术" />
+                                        <el-option label="学术" value="学术" />
+                                    </el-select>
+                                </div>
+                            </div>
+                        </template>
+                        <el-row :gutter="20">
+                            <el-col :span="6" v-for="club in filteredClubs" :key="club.id">
+                                <el-card class="club-card" @click="viewClub(club)">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                        <h4 style="margin: 0;">{{ club.name }}</h4>
+                                        <el-tag :type="club.is_recruiting ? 'success' : 'info'" size="small">
+                                            {{ club.is_recruiting ? '招新中' : '暂停' }}
+                                        </el-tag>
+                                    </div>
+                                    <p style="color: #666; font-size: 14px; margin: 0 0 10px 0;">{{ club.description }}</p>
+                                    <div style="margin-bottom: 10px;">
+                                        <el-tag v-for="tag in club.tags" :key="tag" size="small" style="margin-right: 5px;">{{ tag }}</el-tag>
+                                    </div>
+                                    <div style="font-size: 12px; color: #999;">
+                                        成员: {{ club.member_count }}/{{ club.max_members }}
+                                        <el-rate v-model="club.activity_level" disabled show-score style="margin-left: 10px;" />
+                                    </div>
+                                </el-card>
+                            </el-col>
+                        </el-row>
+                    </el-card>
+                </div>
+
+                <!-- 兴趣问卷 -->
+                <div v-if="currentPage === 'questionnaire' && isAuthenticated">
+                    <el-card>
+                        <template #header><h3 style="margin: 0;">兴趣问卷</h3></template>
+                        <el-form label-width="120px">
+                            <el-form-item label="兴趣爱好">
+                                <el-checkbox-group v-model="questionnaire.hobbies">
+                                    <el-checkbox label="音乐" />
+                                    <el-checkbox label="运动" />
+                                    <el-checkbox label="阅读" />
+                                    <el-checkbox label="游戏" />
+                                    <el-checkbox label="摄影" />
+                                    <el-checkbox label="编程" />
+                                    <el-checkbox label="写作" />
+                                    <el-checkbox label="演讲" />
+                                </el-checkbox-group>
+                            </el-form-item>
+                            <el-form-item label="技能特长">
+                                <el-checkbox-group v-model="questionnaire.skills">
+                                    <el-checkbox label="乐器" />
+                                    <el-checkbox label="编程" />
+                                    <el-checkbox label="设计" />
+                                    <el-checkbox label="写作" />
+                                    <el-checkbox label="演讲" />
+                                    <el-checkbox label="摄影" />
+                                    <el-checkbox label="视频剪辑" />
+                                    <el-checkbox label="组织策划" />
+                                </el-checkbox-group>
+                            </el-form-item>
+                            <el-form-item label="兴趣类别">
+                                <el-checkbox-group v-model="questionnaire.interests">
+                                    <el-checkbox label="音乐" />
+                                    <el-checkbox label="科技" />
+                                    <el-checkbox label="体育" />
+                                    <el-checkbox label="艺术" />
+                                    <el-checkbox label="学术" />
+                                </el-checkbox-group>
+                            </el-form-item>
+                            <el-form-item label="性格偏好">
+                                <el-radio-group v-model="questionnaire.personality">
+                                    <el-radio label="外向">外向型 - 喜欢与人交流</el-radio>
+                                    <el-radio label="内向">内向型 - 喜欢独立思考</el-radio>
+                                    <el-radio label="平衡">平衡型 - 两者皆可</el-radio>
+                                </el-radio-group>
+                            </el-form-item>
+                            <el-form-item>
+                                <el-button type="primary" @click="submitQuestionnaire">提交问卷</el-button>
+                                <el-button @click="resetQuestionnaire">重置</el-button>
+                            </el-form-item>
+                        </el-form>
+                    </el-card>
+                </div>
+
+                <!-- 智能推荐 -->
+                <div v-if="currentPage === 'recommendations' && isAuthenticated">
+                    <el-card>
+                        <template #header><h3 style="margin: 0;">智能推荐</h3></template>
+                        <div v-if="!hasQuestionnaire">
+                            <el-empty description="暂无推荐，请先填写兴趣问卷">
+                                <el-button type="primary" @click="currentPage = 'questionnaire'">填写问卷</el-button>
+                            </el-empty>
+                        </div>
+                        <div v-else>
+                            <el-alert title="基于您的兴趣问卷，我们为您推荐以下社团" type="success" :closable="false" style="margin-bottom: 20px" />
+                            <el-row :gutter="20">
+                                <el-col :span="8" v-for="rec in recommendations" :key="rec.club_id">
+                                    <el-card style="text-align: center; margin-bottom: 20px;">
+                                        <div class="match-score">
+                                            <div class="score-circle">
+                                                <span class="score-value">{{ rec.match_score }}%</span>
+                                            </div>
+                                            <span style="color: #666; font-size: 14px;">匹配度</span>
+                                        </div>
+                                        <h3>{{ rec.club_name }}</h3>
+                                        <p style="color: #666; font-size: 14px; margin: 10px 0;">{{ rec.match_reason }}</p>
+                                        <el-button type="primary" size="small" @click="applyClub(rec.club_id)">申请加入</el-button>
+                                    </el-card>
+                                </el-col>
+                            </el-row>
+                        </div>
+                    </el-card>
+                </div>
+
+                <!-- 我的申请 -->
+                <div v-if="currentPage === 'applications' && isAuthenticated">
+                    <el-card>
+                        <template #header><h3 style="margin: 0;">我的申请</h3></template>
+                        <el-table :data="applications" stripe>
+                            <el-table-column prop="club_name" label="社团名称" />
+                            <el-table-column prop="match_score" label="匹配度" width="100">
+                                <template #default="{ row }">
+                                    <el-tag :type="row.match_score >= 80 ? 'success' : row.match_score >= 60 ? 'warning' : 'info'">
+                                        {{ row.match_score }}%
+                                    </el-tag>
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="status" label="状态" width="100">
+                                <template #default="{ row }">
+                                    <el-tag :type="row.status === 'approved' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'">
+                                        {{ row.status === 'approved' ? '已通过' : row.status === 'rejected' ? '已拒绝' : '待审核' }}
+                                    </el-tag>
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="created_at" label="申请时间" width="180" />
+                        </el-table>
+                        <el-empty v-if="applications.length === 0" description="暂无申请记录" />
+                    </el-card>
+                </div>
+
+                <!-- 社团详情对话框 -->
+                <el-dialog v-model="showClubDetail" :title="selectedClub?.name" width="600px">
+                    <div v-if="selectedClub">
+                        <el-descriptions :column="2" border>
+                            <el-descriptions-item label="类别">{{ selectedClub.category }}</el-descriptions-item>
+                            <el-descriptions-item label="成员数">{{ selectedClub.member_count }}/{{ selectedClub.max_members }}</el-descriptions-item>
+                            <el-descriptions-item label="活跃度">
+                                <el-rate v-model="selectedClub.activity_level" disabled show-score />
+                            </el-descriptions-item>
+                            <el-descriptions-item label="状态">
+                                <el-tag :type="selectedClub.is_recruiting ? 'success' : 'info'">
+                                    {{ selectedClub.is_recruiting ? '招新中' : '暂停招新' }}
+                                </el-tag>
+                            </el-descriptions-item>
+                        </el-descriptions>
+                        <div style="margin-top: 20px;">
+                            <h4>社团简介</h4>
+                            <p style="color: #666; line-height: 1.6;">{{ selectedClub.description }}</p>
+                        </div>
+                        <div style="margin-top: 20px;">
+                            <h4>标签</h4>
+                            <el-tag v-for="tag in selectedClub.tags" :key="tag" style="margin-right: 10px;">{{ tag }}</el-tag>
+                        </div>
+                    </div>
+                    <template #footer>
+                        <el-button @click="showClubDetail = false">关闭</el-button>
+                        <el-button type="primary" @click="applyClub(selectedClub.id)" :disabled="!selectedClub.is_recruiting">申请加入</el-button>
+                    </template>
+                </el-dialog>
+            </el-main>
+        </el-container>
+    </div>
+
+    <script>
+        const { createApp, ref, computed } = Vue;
+        const { ElMessage } = ElementPlus;
+
+        createApp({
+            setup() {
+                const isAuthenticated = ref(false);
+                const currentPage = ref('home');
+                const showRegister = ref(false);
+                const showClubDetail = ref(false);
+                const selectedClub = ref(null);
+                const hasQuestionnaire = ref(false);
+                const filterCategory = ref('');
+
+                const user = ref({
+                    username: '',
+                    full_name: ''
+                });
+
+                const loginForm = ref({
+                    username: '',
+                    password: ''
+                });
+
+                const registerForm = ref({
+                    username: '',
+                    password: '',
+                    full_name: '',
+                    student_id: ''
+                });
+
+                const questionnaire = ref({
+                    hobbies: [],
+                    skills: [],
+                    interests: [],
+                    personality: '平衡'
+                });
+
+                const applications = ref([]);
+
+                // 模拟社团数据
+                const clubs = ref([
+                    {
+                        id: 1,
+                        name: '吉他社',
+                        description: '热爱音乐，享受吉他带来的快乐。定期举办音乐分享会和演出活动。',
+                        category: '音乐',
+                        tags: ['音乐', '吉他', '演出', '艺术'],
+                        member_count: 25,
+                        max_members: 50,
+                        activity_level: 4.5,
+                        is_recruiting: true
+                    },
+                    {
+                        id: 2,
+                        name: '编程俱乐部',
+                        description: '探索编程世界，分享技术经验。组织编程比赛和技术讲座。',
+                        category: '科技',
+                        tags: ['编程', '技术', '开发', '算法'],
+                        member_count: 60,
+                        max_members: 100,
+                        activity_level: 4.8,
+                        is_recruiting: true
+                    },
+                    {
+                        id: 3,
+                        name: '篮球社',
+                        description: '强身健体，享受篮球。每周组织训练和比赛。',
+                        category: '体育',
+                        tags: ['篮球', '运动', '健身', '团队'],
+                        member_count: 20,
+                        max_members: 30,
+                        activity_level: 4.2,
+                        is_recruiting: true
+                    },
+                    {
+                        id: 4,
+                        name: '摄影协会',
+                        description: '记录美好瞬间，分享摄影技巧。组织外拍活动和作品展览。',
+                        category: '艺术',
+                        tags: ['摄影', '艺术', '创作', '视觉'],
+                        member_count: 15,
+                        max_members: 40,
+                        activity_level: 4.0,
+                        is_recruiting: true
+                    },
+                    {
+                        id: 5,
+                        name: '辩论社',
+                        description: '锻炼口才，提升思辨能力。参加校内外辩论比赛。',
+                        category: '学术',
+                        tags: ['辩论', '演讲', '思辨', '逻辑'],
+                        member_count: 18,
+                        max_members: 25,
+                        activity_level: 4.6,
+                        is_recruiting: true
+                    }
+                ]);
+
+                const hotClubs = computed(() => clubs.value.slice(0, 4));
+
+                const filteredClubs = computed(() => {
+                    if (!filterCategory.value) return clubs.value;
+                    return clubs.value.filter(c => c.category === filterCategory.value);
+                });
+
+                const recommendations = ref([]);
+
+                const activeMenu = computed(() => currentPage.value);
+
+                const handleLogin = () => {
+                    if (loginForm.value.username && loginForm.value.password) {
+                        isAuthenticated.value = true;
+                        user.value = {
+                            username: loginForm.value.username,
+                            full_name: loginForm.value.username === 'demo' ? '演示用户' : loginForm.value.username
+                        };
+                        ElMessage.success('登录成功');
+                    } else {
+                        ElMessage.error('请输入用户名和密码');
+                    }
+                };
+
+                const handleRegister = () => {
+                    ElMessage.success('注册成功');
+                    showRegister.value = false;
+                };
+
+                const logout = () => {
+                    isAuthenticated.value = false;
+                    user.value = { username: '', full_name: '' };
+                    currentPage.value = 'home';
+                    ElMessage.success('已退出登录');
+                };
+
+                const handleMenuSelect = (index) => {
+                    currentPage.value = index;
+                };
+
+                const viewClub = (club) => {
+                    selectedClub.value = club;
+                    showClubDetail.value = true;
+                };
+
+                const submitQuestionnaire = () => {
+                    hasQuestionnaire.value = true;
+                    generateRecommendations();
+                    ElMessage.success('问卷提交成功');
+                };
+
+                const resetQuestionnaire = () => {
+                    questionnaire.value = {
+                        hobbies: [],
+                        skills: [],
+                        interests: [],
+                        personality: '平衡'
+                    };
+                };
+
+                const generateRecommendations = () => {
+                    // 模拟AI推荐算法
+                    const recs = clubs.value.map(club => {
+                        let score = 50;
+                        let reasons = [];
+
+                        // 兴趣匹配
+                        const matchingInterests = questionnaire.value.interests.filter(i => 
+                            club.tags.some(t => t.includes(i))
+                        );
+                        if (matchingInterests.length > 0) {
+                            score += 20;
+                            reasons.push(`您的兴趣包含${matchingInterests[0]}`);
+                        }
+
+                        // 技能匹配
+                        const matchingSkills = questionnaire.value.skills.filter(s => 
+                            club.tags.some(t => t.includes(s))
+                        );
+                        if (matchingSkills.length > 0) {
+                            score += 15;
+                            reasons.push('您的技能与社团需求匹配');
+                        }
+
+                        // 活跃度
+                        if (club.activity_level >= 4.5) {
+                            score += 10;
+                            reasons.push('社团活跃度高');
+                        }
+
+                        // 爱好匹配
+                        const matchingHobbies = questionnaire.value.hobbies.filter(h => 
+                            club.tags.some(t => t.includes(h))
+                        );
+                        if (matchingHobbies.length > 0) {
+                            score += 5;
+                        }
+
+                        return {
+                            club_id: club.id,
+                            club_name: club.name,
+                            match_score: Math.min(score, 99),
+                            match_reason: reasons.slice(0, 2).join('；') || '根据您的兴趣推荐'
+                        };
+                    });
+
+                    recommendations.value = recs.sort((a, b) => b.match_score - a.match_score);
+                };
+
+                const applyClub = (clubId) => {
+                    const club = clubs.value.find(c => c.id === clubId);
+                    const rec = recommendations.value.find(r => r.club_id === clubId);
+                    
+                    applications.value.push({
+                        club_name: club.name,
+                        match_score: rec ? rec.match_score : 50,
+                        status: 'pending',
+                        created_at: new Date().toLocaleString('zh-CN')
+                    });
+                    
+                    ElMessage.success('申请成功');
+                    showClubDetail.value = false;
+                };
+
+                return {
+                    isAuthenticated,
+                    currentPage,
+                    showRegister,
+                    showClubDetail,
+                    selectedClub,
+                    hasQuestionnaire,
+                    filterCategory,
+                    user,
+                    loginForm,
+                    registerForm,
+                    questionnaire,
+                    applications,
+                    clubs,
+                    hotClubs,
+                    filteredClubs,
+                    recommendations,
+                    activeMenu,
+                    handleLogin,
+                    handleRegister,
+                    logout,
+                    handleMenuSelect,
+                    viewClub,
+                    submitQuestionnaire,
+                    resetQuestionnaire,
+                    applyClub
+                };
+            }
+        }).use(ElementPlus).mount('#app');
+    </script>
+</body>
+</html>
